@@ -6,6 +6,13 @@ for _,v in pairs(game.CoreGui:GetChildren()) do
 end
 
 local Library = {}
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
+local HTTPService = game:GetService("HttpService")
 
 local dark_UI = Instance.new("ScreenGui")
 dark_UI.Name = "dark_UI"
@@ -494,8 +501,7 @@ function Library:Create(table)
         return ElementHandler
     end
     --// Drag - not by me
-
-    local Mouse = game:GetService('Players').LocalPlayer:GetMouse()
+    
     main.MouseEnter:Connect(function()
         local Input = main.InputBegan:connect(function(Key)
             if Key.UserInputType == Enum.UserInputType.MouseButton1 then
