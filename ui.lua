@@ -494,6 +494,7 @@ function Library:Create(table)
         return ElementHandler
     end
     --// Drag - not by me
+    Mouse = game:GetService('Players').LocalPlayer:GetMouse()
     main.MouseEnter:Connect(function()
         local Input = main.InputBegan:connect(function(Key)
             if Key.UserInputType == Enum.UserInputType.MouseButton1 then
