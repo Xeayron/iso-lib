@@ -21,6 +21,7 @@ dark_UI.Parent = game.CoreGui
 
 function Library:Create(table)
     local windowName = table.Name
+    local toggleKey = table.ToggleKey or Enum.KeyCode.RightShift -- Default key
 
     local main = Instance.new("Frame")
     main.Name = "main"
@@ -81,6 +82,17 @@ function Library:Create(table)
     shadow.Size = UDim2.fromOffset(529, 331)
     shadow.ZIndex = -1
     shadow.Parent = dark_UI
+
+    -- Visibility toggle keybind
+    local guiVisible = true
+    UserInputService.InputBegan:Connect(function(input, gameProcessed)
+        if gameProcessed then return end
+        if input.KeyCode == toggleKey then
+            guiVisible = not guiVisible
+            main.Visible = guiVisible
+            shadow.Visible = guiVisible
+        end
+    end)
 
     tabContainer.Parent = main
     main.Parent = dark_UI
@@ -501,7 +513,7 @@ function Library:Create(table)
         return ElementHandler
     end
     --// Drag - not by me
-    
+
     main.MouseEnter:Connect(function()
         local Input = main.InputBegan:connect(function(Key)
             if Key.UserInputType == Enum.UserInputType.MouseButton1 then
