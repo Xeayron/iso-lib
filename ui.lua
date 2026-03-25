@@ -86,8 +86,10 @@ function Library:Create(table)
     -- Visibility toggle keybind
     local guiVisible = true
     UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
         if input.KeyCode == toggleKey then
+            -- Only block if a textbox is focused, not all gameProcessed inputs
+            local focused = UserInputService:GetFocusedTextBox()
+            if focused then return end
             guiVisible = not guiVisible
             main.Visible = guiVisible
             shadow.Visible = guiVisible
