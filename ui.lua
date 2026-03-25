@@ -5,6 +5,8 @@ for _,v in pairs(game.CoreGui:GetChildren()) do
     end
 end
 
+local Library = {}
+
 local dark_UI = Instance.new("ScreenGui")
 dark_UI.Name = "dark_UI"
 dark_UI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
@@ -529,3 +531,5 @@ function Library:Create(table)
 
     return tabHandler
 end
+
+return Library
