@@ -370,7 +370,7 @@ function Library:Create(table)
                 while RunService.RenderStepped:wait() and down do
                     local percentage = math.clamp((Mouse.X - frame1.AbsolutePosition.X) / (frame1.AbsoluteSize.X), 0, 1)
 					local min = 0
-					local max = 300
+					local max = 1000
 					local value = ((max - min) * percentage) + min
                     value = math.floor(value)
                     textLabel2.Text = value
