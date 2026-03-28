@@ -874,6 +874,7 @@ end
 
 function RayfieldLibrary:CreateWindow(Settings)
 	local Passthrough = false
+	task.wait(0.1)
 	Topbar.Title.Text = Settings.Name
 	Main.Size = UDim2.new(0, 450, 0, 260)
 	Main.Visible = true
