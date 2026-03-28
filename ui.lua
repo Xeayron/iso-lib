@@ -346,13 +346,13 @@ function Library:Create(table)
             local hovered = false
             local down = false
 
-			task.wait(0.5)
+			task.wait(0.1)
             slider.MouseEnter:Connect(function()
                 hovered = true
                 game:GetService('TweenService'):Create(slider, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(43,43,43)}):Play()
             end)
 
-			task.wait(0.5)
+			task.wait(0.1)
             slider.MouseLeave:Connect(function()
                 if not down then
                     game:GetService('TweenService'):Create(slider, TweenInfo.new(0.3), {BackgroundColor3 = Color3.fromRGB(38,38,38)}):Play()
@@ -430,7 +430,7 @@ function Library:Create(table)
 
             frame3.Parent = toggle1
 
-			task.wait(0.5)
+			task.wait(0.1)
             toggle1.Parent = holder
 
             local tog = false
