@@ -14,10 +14,18 @@ if debugX then
 	warn('Initialising Rayfield')
 end
 
+
+
 local function getService(name)
 	local service = game:GetService(name)
 	return if cloneref then cloneref(service) else service
 end
+
+-- Services
+local UserInputService = getService("UserInputService")
+local TweenService = getService("TweenService")
+local Players = getService("Players")
+local CoreGui = getService("CoreGui")
 
 -- Loads and executes a function hosted on a remote URL. Cancels the request if the requested URL takes too long to respond.
 -- Errors with the function are caught and logged to the output
@@ -69,9 +77,45 @@ local function loadWithTimeout(url: string, timeout: number?): ...any
 	return if success then result else nil
 end
 
-local requestsDisabled = true --getgenv and getgenv().DISABLE_RAYFIELD_REQUESTS
-local InterfaceBuild = '3K3W'
-local Release = "Build 1.68"
+local _getgenv = rawget(_G, "getgenv")
+local requestsDisabled = false
+local customAssetId = nil
+local secureMode = false
+if _getgenv then
+	local ok, result = pcall(function() return _getgenv().DISABLE_RAYFIELD_REQUESTS end)
+	if ok and result then requestsDisabled = true end
+	local ok2, result2 = pcall(function() return _getgenv().RAYFIELD_ASSET_ID end)
+	if ok2 and type(result2) == "number" then customAssetId = result2 end
+	local ok3, result3 = pcall(function() return _getgenv().RAYFIELD_SECURE end)
+	if ok3 and result3 then secureMode = true end
+end
+
+if secureMode then
+	local _error = error
+	local _assert = assert
+	warn = function(...) end
+	print = function(...) end
+	error = function(_, level) _error("", level) end
+	assert = function(v, ...) return _assert(v) end
+end
+
+local secureWarnings = {}
+local customAssets = {}
+
+local function secureNotify(wType, title, content)
+	if secureWarnings[wType] then return end
+	secureWarnings[wType] = true
+	task.spawn(function()
+		while not RayfieldLibrary or not RayfieldLibrary.Notify do task.wait(0.5) end
+		RayfieldLibrary:Notify({
+			Title = title,
+			Content = content,
+			Duration = 8,
+		})
+	end)
+end
+local InterfaceBuild = 'UU2NX'
+local Release = "Build 1.743"
 local RayfieldFolder = "Rayfield"
 local ConfigurationFolder = RayfieldFolder.."/Configurations"
 local ConfigurationExtension = ".rfld"
@@ -116,7 +160,6 @@ local useStudio = RunService:IsStudio() or false
 
 local settingsCreated = false
 local settingsInitialized = false -- Whether the UI elements in the settings page have been set to the proper values
-local cachedSettings
 local prompt = useStudio and require(script.Parent.prompt) or loadWithTimeout('https://raw.githubusercontent.com/SiriusSoftwareLtd/Sirius/refs/heads/request/prompt.lua')
 local requestFunc = (syn and syn.request) or (fluxus and fluxus.request) or (http and http.request) or http_request or request
 
@@ -180,7 +223,6 @@ local function loadSettings()
 
 
 		if not settingsCreated then
-			cachedSettings = file
 			return
 		end
 
@@ -227,47 +269,25 @@ if debugX then
 	warn('Settings Loaded')
 end
 
-local analyticsLib
-local sendReport = function(ev_n, sc_n) warn("Failed to load report function") end
-if not requestsDisabled then
-	if debugX then
-		warn('Querying Settings for Reporter Information')
-	end	
-	analyticsLib = loadWithTimeout("https://analytics.sirius.menu/script")
-	if not analyticsLib then
-		warn("Failed to load analytics reporter")
-		analyticsLib = nil
-	elseif analyticsLib and type(analyticsLib.load) == "function" then
-		analyticsLib:load()
-	else
-		warn("Analytics library loaded but missing load function")
-		analyticsLib = nil
-	end
-	sendReport = function(ev_n, sc_n)
-		if not (type(analyticsLib) == "table" and type(analyticsLib.isLoaded) == "function" and analyticsLib:isLoaded()) then
-			warn("Analytics library not loaded")
-			return
+local ANALYTICS_TOKEN = "05de7f9fd320d3b8428cd1c77014a337b85b6c8efee2c5914f5ab5700c354b9a"
+
+local reporter = nil
+if not requestsDisabled and not useStudio then
+	local fetchSuccess, fetchResult = pcall((game :: any).HttpGet, game, "https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/refs/heads/main/reporter.lua")
+	if fetchSuccess and #fetchResult > 0 then
+		local execSuccess, Analytics = pcall(function()
+			return (loadstring(fetchResult) :: any)()
+		end)
+		if execSuccess and Analytics then
+			pcall(function()
+				reporter = Analytics.new({
+					url          = "https://rayfield-collect.sirius-software-ltd.workers.dev",
+					token        = ANALYTICS_TOKEN,
+					product_name = "Rayfield",
+					category     = "UILibrary",
+				})
+			end)
 		end
-		if useStudio then
-			print('Sending Analytics')
-		else
-			if debugX then warn('Reporting Analytics') end
-			analyticsLib:report(
-				{
-					["name"] = ev_n,
-					["script"] = {["name"] = sc_n, ["version"] = Release}
-				},
-				{
-					["version"] = InterfaceBuild
-				}
-			)
-			if debugX then warn('Finished Report') end
-		end
-	end
-	if cachedSettings and (#cachedSettings == 0 or (cachedSettings.System and cachedSettings.System.usageAnalytics and cachedSettings.System.usageAnalytics.Value)) then
-		sendReport("execution", "Rayfield")
-	elseif not cachedSettings then
-		sendReport("execution", "Rayfield")
 	end
 end
 
@@ -674,15 +694,12 @@ local RayfieldLibrary = {
 }
 
 
--- Services
-local UserInputService = getService("UserInputService")
-local TweenService = getService("TweenService")
-local Players = getService("Players")
-local CoreGui = getService("CoreGui")
+
 
 -- Interface Management
 
-local Rayfield = useStudio and script.Parent:FindFirstChild('Rayfield') or game:GetObjects("rbxassetid://10804731440")[1]
+local RayfieldAssetId = customAssetId or 10804731440
+local Rayfield = useStudio and script.Parent:FindFirstChild('Rayfield') or game:GetObjects("rbxassetid://"..RayfieldAssetId)[1]
 local buildAttempts = 0
 local correctBuild = false
 local warned
@@ -704,7 +721,7 @@ repeat
 	end
 
 	local toDestroy
-	toDestroy, Rayfield = Rayfield, useStudio and script.Parent:FindFirstChild('Rayfield') or game:GetObjects("rbxassetid://10804731440")[1]
+	toDestroy, Rayfield = Rayfield, useStudio and script.Parent:FindFirstChild('Rayfield') or game:GetObjects("rbxassetid://"..RayfieldAssetId)[1]
 	if toDestroy and not useStudio then toDestroy:Destroy() end
 
 	buildAttempts = buildAttempts + 1
@@ -739,6 +756,112 @@ elseif not useStudio then
 	end
 end
 
+if secureMode and not customAssetId then
+	secureNotify("default_asset", "Secure Mode", "You are using the default Rayfield asset ID. Set RAYFIELD_ASSET_ID to a custom upload to avoid detection.")
+end
+
+do
+	local AssetPath = RayfieldFolder.."/Assets"
+	local AssetBaseURL = "https://github.com/SiriusSoftwareLtd/Rayfield/blob/main/assets/"
+
+	local assetFiles = {
+		["111263549366178"] = AssetBaseURL.."111263549366178.png?raw=true",
+		["77891951053543"] = AssetBaseURL.."77891951053543.png?raw=true",
+		["78137979054938"] = AssetBaseURL.."78137979054938.png?raw=true",
+		["80503127983237"] = AssetBaseURL.."80503127983237.png?raw=true",
+		["10137832201"] = AssetBaseURL.."10137832201.png?raw=true",
+		["10137941941"] = AssetBaseURL.."10137941941.png?raw=true",
+		["11036884234"] = AssetBaseURL.."11036884234.png?raw=true",
+		["11413591840"] = AssetBaseURL.."11413591840.png?raw=true",
+		["11745872910"] = AssetBaseURL.."11745872910.png?raw=true",
+		["12577727209"] = AssetBaseURL.."12577727209.png?raw=true",
+		["18458939117"] = AssetBaseURL.."18458939117.png?raw=true",
+		["3259050989"] = AssetBaseURL.."3259050989.png?raw=true",
+		["3523728077"] = AssetBaseURL.."3523728077.png?raw=true",
+		["3602733521"] = AssetBaseURL.."3602733521.png?raw=true",
+		["3926305904"] = AssetBaseURL.."3926305904.png?raw=true",
+		["4483362458"] = AssetBaseURL.."4483362458.png?raw=true",
+		["5587865193"] = AssetBaseURL.."5587865193.png?raw=true",
+		["8445471332"] = AssetBaseURL.."8445471332.png?raw=true",
+	}
+
+	for id, _ in assetFiles do
+		customAssets[tostring(id)] = ""
+	end
+
+	local hasCustomAsset = type(getcustomasset) == "function"
+	local hasFilesystem = type(writefile) == "function" and type(makefolder) == "function" and type(isfile) == "function" and type(isfolder) == "function"
+
+	if hasCustomAsset and hasFilesystem then
+		local ok, err = pcall(function()
+			ensureFolder(AssetPath)
+
+			local function nextMissing()
+				for id, _ in assetFiles do
+					if not isfile(AssetPath.."/"..tostring(id)..".png") then
+						return id
+					end
+				end
+				return nil
+			end
+
+			if nextMissing() then
+				task.spawn(function()
+					while true do
+						local id = nextMissing()
+						if not id then break end
+						writefile(AssetPath.."/"..tostring(id)..".png", requestFunc({Url = assetFiles[id], Method = "GET"}).Body)
+						task.wait()
+					end
+				end)
+
+				while nextMissing() do
+					task.wait(0.1)
+				end
+			end
+
+			for id, _ in assetFiles do
+				local success, asset = pcall(getcustomasset, AssetPath.."/"..tostring(id)..".png")
+				if success then
+					customAssets[tostring(id)] = asset
+				else
+					warn("Rayfield | Failed to load custom asset: "..tostring(id).." - "..tostring(asset))
+				end
+			end
+		end)
+
+		if not ok then
+			warn("Rayfield | Failed to load custom assets: "..tostring(err))
+			secureNotify("asset_load_fail", "Rayfield", "Failed to load custom assets. UI images may not display correctly.")
+		end
+	else
+		secureNotify("no_getcustomasset", "Rayfield", "Your executor does not support getcustomasset. Some UI images may not render correctly.")
+	end
+
+	Rayfield.Main.Shadow.Image.Image = customAssets[tostring(5587865193)]
+	Rayfield.Main.Topbar.Hide.Image = customAssets[tostring(10137832201)]
+	Rayfield.Main.Topbar.ChangeSize.Image = customAssets[tostring(10137941941)]
+	Rayfield.Main.Topbar.Settings.Image = customAssets[tostring(80503127983237)]
+	Rayfield.Main.Topbar.Icon.Image = customAssets[tostring(78137979054938)]
+	Rayfield.Main.Topbar.Search.Image = customAssets[tostring(8445471332)]
+	Rayfield.Main.Topbar.Search.ImageRectOffset = Vector2.new(204, 104)
+	Rayfield.Main.Topbar.Search.ImageRectSize = Vector2.new(96, 96)
+	Rayfield.Main.Elements.Template.Toggle.Switch.Shadow.Image = customAssets[tostring(3602733521)]
+	Rayfield.Main.Elements.Template.Slider.Main.Shadow.Image = customAssets[tostring(3602733521)]
+	Rayfield.Main.Elements.Template.Dropdown.Toggle.Image = customAssets[tostring(3926305904)]
+	Rayfield.Main.Elements.Template.Dropdown.Toggle.ImageRectOffset = Vector2.new(564, 284)
+	Rayfield.Main.Elements.Template.Dropdown.Toggle.ImageRectSize = Vector2.new(36, 36)
+	Rayfield.Main.Elements.Template.Label.Icon.Image = customAssets[tostring(11745872910)]
+	Rayfield.Main.Elements.Template.ColorPicker.CPBackground.MainCP.Image = customAssets[tostring(11413591840)]
+	Rayfield.Main.Elements.Template.ColorPicker.CPBackground.MainCP.MainPoint.Image = customAssets[tostring(3259050989)]
+	Rayfield.Main.Elements.Template.ColorPicker.ColorSlider.SliderPoint.Image = customAssets[tostring(3259050989)]
+	Rayfield.Main.TabList.Template.Image.Image = customAssets[tostring(4483362458)]
+	Rayfield.Main.Search.Search.Image = customAssets[tostring(18458939117)]
+	Rayfield.Main.Search.Shadow.Image = customAssets[tostring(5587865193)]
+	Rayfield.Notifications.Template.Icon.Image = customAssets[tostring(77891951053543)]
+	Rayfield.Notifications.Template.Shadow.Image = customAssets[tostring(3523728077)]
+	Rayfield.Loading.Banner.Image = customAssets[tostring(111263549366178)]
+end -- custom asset block
 
 local minSize = Vector2.new(1024, 768)
 local useMobileSizing
@@ -862,9 +985,8 @@ local function getIcon(name : string): {id: number, imageRectSize: Vector2, imag
 
 	return asset
 end
--- Converts ID to asset URI. Returns rbxassetid://0 if ID is not a number
 local function getAssetUri(id: any): string
-	local assetUri = "rbxassetid://0" -- Default to empty image
+	local assetUri = ""
 	if type(id) == "number" then
 		assetUri = "rbxassetid://" .. id
 	elseif type(id) == "string" and not Icons then
@@ -873,6 +995,32 @@ local function getAssetUri(id: any): string
 		warn("Rayfield | The icon argument must either be an icon ID (number) or a Lucide icon name (string)")
 	end
 	return assetUri
+end
+
+local function isCustomAsset(value)
+	return type(value) == "string" and (string.find(value, "rbxasset://") == 1 or string.find(value, "rbxthumb://") == 1)
+end
+
+local function resolveIcon(icon)
+	if not icon or icon == 0 then
+		return "", nil, nil
+	end
+
+	if isCustomAsset(icon) then
+		return icon, nil, nil
+	end
+
+	if secureMode then
+		secureNotify("icon_blocked", "Secure Mode", "Element icons using asset IDs or Lucide names are blocked. Use getcustomasset() for icons to stay undetected.")
+		return "", nil, nil
+	end
+
+	if typeof(icon) == "string" and Icons then
+		local asset = getIcon(icon)
+		return "rbxassetid://" .. asset.id, asset.imageRectOffset, asset.imageRectSize
+	else
+		return getAssetUri(icon), nil, nil
+	end
 end
 
 local function makeDraggable(object, dragObject, enableTaptic, tapticOffset)
@@ -1055,17 +1203,12 @@ function RayfieldLibrary:Notify(data) -- action e.g open messages
 		newNotification.Description.Text = data.Content or "Unknown Content"
 
 		if data.Image then
-			if typeof(data.Image) == 'string' and Icons then
-				local asset = getIcon(data.Image)
-
-				newNotification.Icon.Image = 'rbxassetid://'..asset.id
-				newNotification.Icon.ImageRectOffset = asset.imageRectOffset
-				newNotification.Icon.ImageRectSize = asset.imageRectSize
-			else
-				newNotification.Icon.Image = getAssetUri(data.Image)
-			end
+			local img, rectOffset, rectSize = resolveIcon(data.Image)
+			newNotification.Icon.Image = img
+			if rectOffset then newNotification.Icon.ImageRectOffset = rectOffset end
+			if rectSize then newNotification.Icon.ImageRectSize = rectSize end
 		else
-			newNotification.Icon.Image = "rbxassetid://" .. 0
+			newNotification.Icon.Image = ""
 		end
 
 		-- Set initial transparency values
@@ -1285,7 +1428,9 @@ local function Hide(notify: boolean?)
 	TweenService:Create(Main.Topbar.Title, TweenInfo.new(0.5, Enum.EasingStyle.Exponential), {TextTransparency = 1}):Play()
 	TweenService:Create(Main.Shadow.Image, TweenInfo.new(0.5, Enum.EasingStyle.Exponential), {ImageTransparency = 1}):Play()
 	TweenService:Create(Topbar.UIStroke, TweenInfo.new(0.5, Enum.EasingStyle.Exponential), {Transparency = 1}):Play()
-	TweenService:Create(dragBarCosmetic, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
+	if dragBarCosmetic then
+		TweenService:Create(dragBarCosmetic, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {BackgroundTransparency = 1}):Play()
+	end
 
 	if useMobilePrompt and MPrompt then
 		TweenService:Create(MPrompt, TweenInfo.new(0.5, Enum.EasingStyle.Exponential), {Size = UDim2.new(0, 120, 0, 30), Position = UDim2.new(0.5, 0, 0, 20), BackgroundTransparency = 0.3}):Play()
@@ -1300,7 +1445,7 @@ local function Hide(notify: boolean?)
 
 	setTabButtonsVisible(false)
 
-	dragInteract.Visible = false
+	if dragInteract then dragInteract.Visible = false end
 
 	setElementsVisible(false)
 
@@ -1311,7 +1456,7 @@ end
 
 local function Maximise()
 	Debounce = true
-	Topbar.ChangeSize.Image = "rbxassetid://"..10137941941
+	Topbar.ChangeSize.Image = customAssets[tostring(10137941941)]
 
 	TweenService:Create(Topbar.UIStroke, TweenInfo.new(0.5, Enum.EasingStyle.Exponential), {Transparency = 1}):Play()
 	TweenService:Create(Main.Shadow.Image, TweenInfo.new(0.5, Enum.EasingStyle.Exponential), {ImageTransparency = 0.6}):Play()
@@ -1391,7 +1536,7 @@ end
 
 local function Minimise()
 	Debounce = true
-	Topbar.ChangeSize.Image = "rbxassetid://"..11036884234
+	Topbar.ChangeSize.Image = customAssets[tostring(11036884234)]
 
 	Topbar.UIStroke.Color = SelectedTheme.ElementStroke
 
@@ -1559,10 +1704,6 @@ function RayfieldLibrary:CreateWindow(Settings)
 
 	ensureFolder(RayfieldFolder)
 
-	-- Attempt to report an event to analytics
-	if not requestsDisabled then
-		sendReport("window_created", Settings.Name or "Unknown")
-	end
 	local Passthrough = false
 	Topbar.Title.Text = Settings.Name
 
@@ -1592,17 +1733,12 @@ function RayfieldLibrary:CreateWindow(Settings)
 		Topbar.Title.Position = UDim2.new(0, 47, 0.5, 0)
 
 		if Settings.Icon then
-			if typeof(Settings.Icon) == 'string' and Icons then
-				local asset = getIcon(Settings.Icon)
-
-				Topbar.Icon.Image = 'rbxassetid://'..asset.id
-				Topbar.Icon.ImageRectOffset = asset.imageRectOffset
-				Topbar.Icon.ImageRectSize = asset.imageRectSize
-			else
-				Topbar.Icon.Image = getAssetUri(Settings.Icon)
-			end
+			local img, rectOffset, rectSize = resolveIcon(Settings.Icon)
+			Topbar.Icon.Image = img
+			if rectOffset then Topbar.Icon.ImageRectOffset = rectOffset end
+			if rectSize then Topbar.Icon.ImageRectSize = rectSize end
 		else
-			Topbar.Icon.Image = "rbxassetid://" .. 0
+			Topbar.Icon.Image = ""
 		end
 	end
 
@@ -1631,8 +1767,9 @@ function RayfieldLibrary:CreateWindow(Settings)
 
 	if not Settings.DisableRayfieldPrompts then
 		task.spawn(function()
-			while true do
+			while not rayfieldDestroyed do
 				task.wait(math.random(180, 600))
+				if rayfieldDestroyed then break end
 				RayfieldLibrary:Notify({
 					Title = "Rayfield Interface",
 					Content = "Enjoying this UI library? Find it at sirius.menu/discord",
@@ -1674,10 +1811,10 @@ function RayfieldLibrary:CreateWindow(Settings)
 		end
 	end
 
-	if Settings.Discord and Settings.Discord.Enabled and not useStudio then
+	if Settings.Discord and Settings.Discord.Enabled and not useStudio and not secureMode then
 		ensureFolder(RayfieldFolder.."/Discord Invites")
 
-		if callSafely(isfile, RayfieldFolder.."/Discord Invites".."/"..Settings.Discord.Invite..ConfigurationExtension) then
+		if not callSafely(isfile, RayfieldFolder.."/Discord Invites".."/"..Settings.Discord.Invite..ConfigurationExtension) then
 			if requestFunc then
 				pcall(function()
 					requestFunc({
@@ -1736,6 +1873,12 @@ function RayfieldLibrary:CreateWindow(Settings)
 					Passthrough = true
 				end
 			end
+		end
+
+		if not Passthrough and secureMode then
+			warn("Rayfield | Secure Mode: Key system requires a valid saved key. The key UI cannot be shown as it requires loading detectable assets.")
+			Rayfield.Enabled = false
+			return RayfieldLibrary
 		end
 
 		if not Passthrough then
@@ -1856,6 +1999,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 			KeyMain.Hide.MouseButton1Click:Connect(function()
 				fadeOutKeyUI(KeyMain)
 				task.wait(0.51)
+				Passthrough = true
 				RayfieldLibrary:Destroy()
 				KeyUI:Destroy()
 			end)
@@ -1865,6 +2009,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 	end
 	if Settings.KeySystem then
 		repeat task.wait() until Passthrough
+		if rayfieldDestroyed then return end
 	end
 
 	Notifications.Template.Visible = false
@@ -1901,15 +2046,10 @@ function RayfieldLibrary:CreateWindow(Settings)
 		TabButton.Size = UDim2.new(0, TabButton.Title.TextBounds.X + 30, 0, 30)
 
 		if Image and Image ~= 0 then
-			if typeof(Image) == 'string' and Icons then
-				local asset = getIcon(Image)
-
-				TabButton.Image.Image = 'rbxassetid://'..asset.id
-				TabButton.Image.ImageRectOffset = asset.imageRectOffset
-				TabButton.Image.ImageRectSize = asset.imageRectSize
-			else
-				TabButton.Image.Image = getAssetUri(Image)
-			end
+			local img, rectOffset, rectSize = resolveIcon(Image)
+			TabButton.Image.Image = img
+			if rectOffset then TabButton.Image.ImageRectOffset = rectOffset end
+			if rectSize then TabButton.Image.ImageRectSize = rectSize end
 
 			TabButton.Title.AnchorPoint = Vector2.new(0, 0.5)
 			TabButton.Title.Position = UDim2.new(0, 37, 0.5, 0)
@@ -2115,7 +2255,6 @@ function RayfieldLibrary:CreateWindow(Settings)
 
 			local opened = false 
 			local mouse = Players.LocalPlayer:GetMouse()
-			Main.Image = "http://www.roblox.com/asset/?id=11415645739"
 			local mainDragging = false 
 			local sliderDragging = false 
 			ColorPicker.Interact.MouseButton1Down:Connect(function()
@@ -2157,7 +2296,7 @@ function RayfieldLibrary:CreateWindow(Settings)
 
 			end)
 
-			UserInputService.InputEnded:Connect(function(input, gameProcessed) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then 
+			local colorPickerInputConnection = UserInputService.InputEnded:Connect(function(input, gameProcessed) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 					mainDragging = false
 					sliderDragging = false
 				end end)
@@ -2301,6 +2440,9 @@ function RayfieldLibrary:CreateWindow(Settings)
 				if colorPickerRenderConnection then
 					colorPickerRenderConnection:Disconnect()
 				end
+				if colorPickerInputConnection then
+					colorPickerInputConnection:Disconnect()
+				end
 			end)
 
 			if Settings.ConfigurationSaving then
@@ -2398,37 +2540,17 @@ function RayfieldLibrary:CreateWindow(Settings)
 			Label.UIStroke.Color = Color or SelectedTheme.SecondaryElementStroke
 
 			if Icon then
-				if typeof(Icon) == 'string' and Icons then
-					local asset = getIcon(Icon)
-
-					Label.Icon.Image = 'rbxassetid://'..asset.id
-					Label.Icon.ImageRectOffset = asset.imageRectOffset
-					Label.Icon.ImageRectSize = asset.imageRectSize
-				else
-					Label.Icon.Image = getAssetUri(Icon)
-				end
+				local img, rectOffset, rectSize = resolveIcon(Icon)
+				Label.Icon.Image = img
+				if rectOffset then Label.Icon.ImageRectOffset = rectOffset end
+				if rectSize then Label.Icon.ImageRectSize = rectSize end
 			else
-				Label.Icon.Image = "rbxassetid://" .. 0
+				Label.Icon.Image = ""
 			end
 
 			if Icon and Label:FindFirstChild('Icon') then
 				Label.Title.Position = UDim2.new(0, 45, 0.5, 0)
 				Label.Title.Size = UDim2.new(1, -100, 0, 14)
-
-				if Icon then
-					if typeof(Icon) == 'string' and Icons then
-						local asset = getIcon(Icon)
-
-						Label.Icon.Image = 'rbxassetid://'..asset.id
-						Label.Icon.ImageRectOffset = asset.imageRectOffset
-						Label.Icon.ImageRectSize = asset.imageRectSize
-					else
-						Label.Icon.Image = getAssetUri(Icon)
-					end
-				else
-					Label.Icon.Image = "rbxassetid://" .. 0
-				end
-
 				Label.Icon.Visible = true
 			end
 
@@ -2454,19 +2576,10 @@ function RayfieldLibrary:CreateWindow(Settings)
 					Label.Title.Position = UDim2.new(0, 45, 0.5, 0)
 					Label.Title.Size = UDim2.new(1, -100, 0, 14)
 
-					if Icon then
-						if typeof(Icon) == 'string' and Icons then
-							local asset = getIcon(Icon)
-
-							Label.Icon.Image = 'rbxassetid://'..asset.id
-							Label.Icon.ImageRectOffset = asset.imageRectOffset
-							Label.Icon.ImageRectSize = asset.imageRectSize
-						else
-							Label.Icon.Image = getAssetUri(Icon)
-						end
-					else
-						Label.Icon.Image = "rbxassetid://" .. 0
-					end
+					local img, rectOffset, rectSize = resolveIcon(Icon)
+					Label.Icon.Image = img
+					if rectOffset then Label.Icon.ImageRectOffset = rectOffset end
+					if rectSize then Label.Icon.ImageRectSize = rectSize end
 
 					Label.Icon.Visible = true
 				end
@@ -3479,6 +3592,36 @@ function RayfieldLibrary:CreateWindow(Settings)
 	end)
 
 	if not success then warn('Rayfield had an issue creating settings.') end
+
+	-- Report after createSettings so loadSettings() has run and usageAnalytics reflects the user's saved preference
+	if reporter and getSetting("System", "usageAnalytics") then
+		local themeName = "Default"
+		if Settings.Theme then
+			if type(Settings.Theme) == "string" then
+				themeName = Settings.Theme
+			elseif type(Settings.Theme) == "table" then
+				themeName = "Custom"
+			end
+		end
+
+		local discordInvite = nil
+		if Settings.Discord and Settings.Discord.Enabled and Settings.Discord.Invite and Settings.Discord.Invite ~= "" then
+			local raw = tostring(Settings.Discord.Invite)
+			-- Normalize: strip URL prefixes to extract just the invite code
+			discordInvite = (raw:match("discord%.gg/([%w%-]+)") or raw:match("discord%.com/invite/([%w%-]+)") or raw):sub(1, 32)
+		end
+
+		reporter:windowCreated({
+			script_name       = Settings.Name or "Unknown",
+			script_version    = Release,
+			interface_version = InterfaceBuild,
+			theme             = themeName,
+			is_mobile         = useMobileSizing and true or false,
+			has_key_system    = Settings.KeySystem and true or false,
+			discord_invite    = discordInvite,
+			config_saving     = (Settings.ConfigurationSaving and Settings.ConfigurationSaving.Enabled) and true or false,
+		})
+	end
 
 	return Window
 end
